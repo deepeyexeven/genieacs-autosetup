@@ -47,7 +47,7 @@ ${GREEN}                           Author: DeepEyexeven                         
 ${GREEN}============================================================================${NC}
 EOF
 echo -e "${GREEN}Do you want to continue? (y/n)${NC}"
-read confirmation
+read -r confirmation
 
 if [[ ! "$confirmation" =~ ^[Yy]$ ]]; then
     echo -e "${GREEN}Installation cancelled. No changes were made.${NC}"
@@ -69,9 +69,9 @@ echo -e "  FS (Port 7567)"
 echo -e "     → File server for firmware, scripts, and provisioning files."
 echo
 
-read -p "Enable CWMP? (y/n) [y]: " enable_cwmp
-read -p "Enable NBI? (y/n) [n]: " enable_nbi
-read -p "Enable FS? (y/n) [y]: " enable_fs
+read -rp "Enable CWMP? (y/n) [y]: " enable_cwmp
+read -rp "Enable NBI? (y/n) [n]: " enable_nbi
+read -rp "Enable FS? (y/n) [y]: " enable_fs
 
 enable_cwmp=$(echo "${enable_cwmp:-y}" | tr '[:upper:]' '[:lower:]')
 enable_nbi=$(echo "${enable_nbi:-n}" | tr '[:upper:]' '[:lower:]')
@@ -108,10 +108,9 @@ if ! $MONGO_RUNNING; then
     apt-get update -qq
     apt-get install -y gnupg curl
 
-    # Detect Ubuntu version
     UBUNTU_VERSION=$(lsb_release -rs)
     echo -e "${YELLOW}Detected Ubuntu $UBUNTU_VERSION${NC}"
-# For Ubuntu 24.04, install libssl1.1 manually
+    if [[ "$UBUNTU_VERSION" == "24.04" ]]; then
         echo -e "${YELLOW}Installing libssl1.1 compatibility library for Ubuntu 24.04...${NC}"
         wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
         dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb || apt-get install -f -y
@@ -122,24 +121,20 @@ if ! $MONGO_RUNNING; then
     curl -fsSL https://www.mongodb.org/static/pgp/server-4.4.asc | \
        gpg -o /usr/share/keyrings/mongodb-server-4.4.gpg --dearmor
 
-    # MongoDB 4.4 uses focal repository for Ubuntu
     echo "deb [signed-by=/usr/share/keyrings/mongodb-server-4.4.gpg] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | \
         tee /etc/apt/sources.list.d/mongodb-org-4.4.list
 
     apt-get update -qq
-    apt-get install -y mongodb-org
-    
-    if [ $? -ne 0 ]; then
+    if ! apt-get install -y mongodb-org; then
         echo -e "${RED}MongoDB installation failed. Check /var/log/gacs-install.log for details${NC}"
         exit 1
     fi
-    
+
     systemctl enable mongod
     systemctl start mongod
-    
-    # Wait for MongoDB to be ready
+
     MONGO_READY=false
-    for i in {1..30}; do
+    for _ in {1..30}; do
         if mongosh --eval "db.adminCommand('ping')" --quiet >/dev/null 2>&1 || mongo --eval "db.adminCommand('ping')" --quiet >/dev/null 2>&1; then
             echo -e "${GREEN}MongoDB is ready!${NC}"
             MONGO_READY=true
@@ -147,7 +142,7 @@ if ! $MONGO_RUNNING; then
         fi
         sleep 1
     done
-    
+
     if [ "$MONGO_READY" = false ]; then
         echo -e "${RED}MongoDB failed to start. Check /var/log/gacs-install.log for details${NC}"
         exit 1
@@ -253,15 +248,17 @@ CWMP_STATUS=$(systemctl is-active genieacs-cwmp)
 NBI_STATUS=$(systemctl is-active genieacs-nbi)
 FS_STATUS=$(systemctl is-active genieacs-fs)
 
-echo "============================================================================" >> "$LOG_FILE"
-echo "Service Status Check - $(date)" >> "$LOG_FILE"
-echo "============================================================================" >> "$LOG_FILE"
-echo "MongoDB (mongod): $MONGODB_STATUS" >> "$LOG_FILE"
-echo "GenieACS UI: $UI_STATUS" >> "$LOG_FILE"
-[[ "$enable_cwmp" == "y" ]] && echo "GenieACS CWMP: $CWMP_STATUS" >> "$LOG_FILE"
-[[ "$enable_nbi" == "y" ]] && echo "GenieACS NBI: $NBI_STATUS" >> "$LOG_FILE"
-[[ "$enable_fs" == "y" ]] && echo "GenieACS FS: $FS_STATUS" >> "$LOG_FILE"
-echo "" >> "$LOG_FILE"
+{
+echo "============================================================================"
+echo "Service Status Check - $(date)"
+echo "============================================================================"
+echo "MongoDB (mongod): $MONGODB_STATUS"
+echo "GenieACS UI: $UI_STATUS"
+[[ "$enable_cwmp" == "y" ]] && echo "GenieACS CWMP: $CWMP_STATUS"
+[[ "$enable_nbi" == "y" ]] && echo "GenieACS NBI: $NBI_STATUS"
+[[ "$enable_fs" == "y" ]] && echo "GenieACS FS: $FS_STATUS"
+echo ""
+} >> "$LOG_FILE"
 
 # Check for any failed services
 FAILED_SERVICES=""
@@ -274,13 +271,14 @@ FAILED_SERVICES=""
 if [[ -n "$FAILED_SERVICES" ]]; then
     echo -e "${RED}WARNING: The following services are not running:$FAILED_SERVICES${NC}"
     echo -e "${YELLOW}Check logs with: journalctl -xe${NC}"
-    echo "FAILED SERVICES:$FAILED_SERVICES" >> "$LOG_FILE"
-    
-    echo "============================================================================" >> "$LOG_FILE"
-    echo "Service Logs for Failed Services" >> "$LOG_FILE"
-    echo "============================================================================" >> "$LOG_FILE"
-    [[ "$enable_nbi" == "y" ]] && [[ "$NBI_STATUS" != "active" ]] && journalctl -u genieacs-nbi -n 50 --no-pager >> "$LOG_FILE" 2>&1
-    [[ "$enable_fs" == "y" ]] && [[ "$FS_STATUS" != "active" ]] && journalctl -u genieacs-fs -n 50 --no-pager >> "$LOG_FILE" 2>&1
+    {
+    echo "FAILED SERVICES:$FAILED_SERVICES"
+    echo "============================================================================"
+    echo "Service Logs for Failed Services"
+    echo "============================================================================"
+    [[ "$enable_nbi" == "y" ]] && [[ "$NBI_STATUS" != "active" ]] && journalctl -u genieacs-nbi -n 50 --no-pager 2>&1
+    [[ "$enable_fs" == "y" ]] && [[ "$FS_STATUS" != "active" ]] && journalctl -u genieacs-fs -n 50 --no-pager 2>&1
+    } >> "$LOG_FILE"
 fi
 
 # ------------------------
