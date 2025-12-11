@@ -125,7 +125,7 @@ if ! $MONGO_RUNNING; then
         tee /etc/apt/sources.list.d/mongodb-org-4.4.list
 
     apt-get update -qq
-    if ! apt-get install -y mongodb-org; then
+    if ! apt-get install -y mongodb-org mongodb-database-tools; then
         echo -e "${RED}MongoDB installation failed. Check /var/log/gacs-install.log for details${NC}"
         exit 1
     fi
