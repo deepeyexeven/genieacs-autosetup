@@ -210,7 +210,13 @@ systemctl enable --now genieacs-ui
 [[ "$enable_fs" == "y" ]] && systemctl enable --now genieacs-fs
 
 # ------------------------
+# Parameter directory detection (prefer repo path, fallback to script-local)
 PARAM_DIR="/opt/GenieACS-Installer/parameter"
+SCRIPT_DIR_FALLBACK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/parameter"
+
+if [ ! -d "$PARAM_DIR" ] && [ -d "$SCRIPT_DIR_FALLBACK" ]; then
+    PARAM_DIR="$SCRIPT_DIR_FALLBACK"
+fi
 
 if [ -d "$PARAM_DIR" ] && [ -f "$PARAM_DIR/config.bson" ]; then
     echo -e "${YELLOW}Restoring default GenieACS parameters...${NC}"
