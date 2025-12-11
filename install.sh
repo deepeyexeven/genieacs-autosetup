@@ -130,6 +130,11 @@ if ! $MONGO_RUNNING; then
         exit 1
     fi
 
+    if ! command -v mongorestore >/dev/null 2>&1; then
+        echo -e "${RED}mongorestore not found after installation. Please check mongodb-database-tools package.${NC}"
+        exit 1
+    fi
+
     systemctl enable mongod
     systemctl start mongod
 
