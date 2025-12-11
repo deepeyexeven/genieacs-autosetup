@@ -120,7 +120,8 @@ if ! $MONGO_RUNNING; then
     curl -fsSL https://www.mongodb.org/static/pgp/server-4.4.asc | \
        gpg -o /usr/share/keyrings/mongodb-server-4.4.gpg --dearmor
 
-    # MongoDB 4.4 uses focal repository for all Ubuntu versions
+    # MongoDB 4.4 uses focal repository for Ubuntu
+    echo "deb [signed-by=/usr/share/keyrings/mongodb-server-4.4.gpg] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | \
         tee /etc/apt/sources.list.d/mongodb-org-4.4.list
 
     apt-get update -qq
@@ -178,6 +179,10 @@ chmod 600 /opt/genieacs/genieacs.env
 GENIEACS_BIN_PATH=$(which genieacs-ui 2>/dev/null || echo "/usr/local/bin/genieacs-ui")
 GENIEACS_BIN_DIR=$(dirname "$GENIEACS_BIN_PATH")
 # Create systemd services (but only enable chosen)
+for svc in ui cwmp nbi fs; do
+    [[ "$svc" == "cwmp" && "$enable_cwmp" != "y" ]] && continue
+    [[ "$svc" == "nbi" && "$enable_nbi" != "y" ]] && continue
+    [[ "$svc" == "fs" && "$enable_fs" != "y" ]] && continue
     cat << EOF > /etc/systemd/system/genieacs-$svc.service
 [Unit]
 Description=GenieACS $svc
@@ -203,14 +208,14 @@ systemctl enable --now genieacs-ui
 [[ "$enable_fs" == "y" ]] && systemctl enable --now genieacs-fs
 
 # ------------------------
-PARAM_DIR="$SCRIPT_DIR/parameter"
+PARAM_DIR="/opt/GenieACS-Installer/parameter"
 
 if [ -d "$PARAM_DIR" ] && [ -f "$PARAM_DIR/config.bson" ]; then
     echo -e "${YELLOW}Restoring default GenieACS parameters...${NC}"
     sleep 3  # Wait for services to initialize
     
     mongorestore --db genieacs --collection config --drop "$PARAM_DIR/config.bson" 2>/dev/null
-    mongorertualParameters --drop "$PARAM_DIR/virtualParameters.bson" 2>/dev/null
+    mongorestore --db genieacs --collection virtualParameters --drop "$PARAM_DIR/virtualParameters.bson" 2>/dev/null
     mongorestore --db genieacs --collection presets --drop "$PARAM_DIR/presets.bson" 2>/dev/null
     mongorestore --db genieacs --collection provisions --drop "$PARAM_DIR/provisions.bson" 2>/dev/null
     
@@ -238,7 +243,7 @@ ufw --force enable
 # ------------------------
 # Service Status Check
 # ------------------------
-echo -e "${YELLOW}Checking service status...${RESET}"
+echo -e "${YELLOW}Checking service status...${NC}"
 
 MONGODB_STATUS=$(systemctl is-active mongod)
 UI_STATUS=$(systemctl is-active genieacs-ui)
